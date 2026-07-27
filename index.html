@@ -8,29 +8,66 @@
         *{margin:0;padding:0;box-sizing:border-box}
         body{background:#1a1a2e;display:flex;flex-direction:column;height:100vh;overflow:hidden}
         .header{background:#16213e;color:#e0e0e0;padding:8px;font-size:14px;text-align:center;flex-shrink:0}
-        .canvas-wrap{flex:1;overflow:auto;display:flex;justify-content:center;background:#333}
-        canvas{display:block}
+        .viewer{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#525659;display:flex;justify-content:center;align-items:flex-start}
+        canvas{display:block;max-width:100%;height:auto}
+        .loading{color:#ccc;font-size:16px;padding:40px;text-align:center}
+        .footer{background:#16213e;color:#aaa;padding:8px;text-align:center;font-size:14px;flex-shrink:0;display:flex;justify-content:center;align-items:center;gap:16px}
+        .footer button{border:none;background:#0f3460;color:#fff;padding:6px 20px;border-radius:4px;font-size:14px;cursor:pointer}
+        .footer button:active{background:#1a5080}
     </style>
 </head>
 <body>
     <div class="header">ZFX-W2053 加热台说明书</div>
-    <div class="canvas-wrap" id="container"></div>
+    <div class="viewer" id="viewer"><div class="loading">加载中...</div></div>
+    <div class="footer" id="footer" style="display:none">
+        <button onclick="prevPage()">上一页</button>
+        <span id="pageInfo"></span>
+        <button onclick="nextPage()">下一页</button>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        var pdfDoc = null, currentPage = 1, totalPages = 0;
+        var viewer = document.getElementById('viewer');
+        var footer = document.getElementById('footer');
+        var pageInfo = document.getElementById('pageInfo');
+
+        function renderPage(num) {
+            viewer.innerHTML = '<div class="loading">加载中...</div>';
+            pdfDoc.getPage(num).then(function(page) {
+                var scale = 2.0;
+                var viewport = page.getViewport({scale: scale});
+                var canvas = document.createElement('canvas');
+                var ctx = canvas.getContext('2d');
+                var pixelRatio = window.devicePixelRatio || 1;
+                canvas.width = viewport.width * pixelRatio;
+                canvas.height = viewport.height * pixelRatio;
+                canvas.style.width = viewport.width + 'px';
+                canvas.style.height = viewport.height + 'px';
+                ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+                viewer.innerHTML = '';
+                viewer.appendChild(canvas);
+                page.render({canvasContext: ctx, viewport: viewport});
+                pageInfo.textContent = num + ' / ' + totalPages;
+            });
+        }
+
         pdfjsLib.getDocument('manual.pdf').promise.then(function(pdf) {
-            var container = document.getElementById('container');
-            for (var i = 1; i <= pdf.numPages; i++) {
-                pdf.getPage(i).then(function(page) {
-                    var scale = Math.min((container.clientWidth - 16) / page.getViewport({scale:1}).width, 1.2);
-                    var viewport = page.getViewport({scale: scale});
-                    var canvas = document.createElement('canvas');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    container.appendChild(canvas);
-                    page.render({canvasContext: canvas.getContext('2d'), viewport: viewport});
-                });
-            }
+            pdfDoc = pdf;
+            totalPages = pdf.numPages;
+            footer.style.display = 'flex';
+            renderPage(1);
+        });
+
+        function prevPage() { if (currentPage > 1) { currentPage--; renderPage(currentPage); } }
+        function nextPage() { if (currentPage < totalPages) { currentPage++; renderPage(currentPage); } }
+
+        // swipe support
+        var touchStartX = 0;
+        viewer.addEventListener('touchstart', function(e) { touchStartX = e.touches[0].clientX; });
+        viewer.addEventListener('touchend', function(e) {
+            var dx = e.changedTouches[0].clientX - touchStartX;
+            if (Math.abs(dx) > 60) { dx > 0 ? prevPage() : nextPage(); }
         });
     </script>
 </body>
